@@ -22,21 +22,25 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK and NDK
-        uses: android-actions/setup-android@v3
-        with:
-          ndk-version: 25.1.8937393
+      - name: Install NDK and Accept Licenses
+        run: |
+          echo "Đang cài đặt NDK 25.1.8937393 trực tiếp qua sdkmanager..."
+          echo "y" | sdkmanager --install "ndk;25.1.8937393"
+          
+          # Tự động tìm thư mục dự án và trỏ local.properties vào đúng NDK vừa cài
+          GRADLEW_PATH=$(find source_code -name "gradlew" -type f)
+          PROJECT_DIR=$(dirname "$GRADLEW_PATH")
+          
+          SDK_PATH=$ANDROID_SDK_ROOT
+          NDK_PATH="$SDK_PATH/ndk/25.1.8937393"
+          
+          echo "ndk.dir=$NDK_PATH" > "$PROJECT_DIR/local.properties"
+          echo "Đã cấu hình ndk.dir trỏ tới: $NDK_PATH"
 
       - name: Build APK with Gradle
         run: |
           GRADLEW_PATH=$(find source_code -name "gradlew" -type f)
-          if [ -z "$GRADLEW_PATH" ]; then
-            echo "Không tìm thấy file gradlew!"
-            exit 1
-          fi
-          
           PROJECT_DIR=$(dirname "$GRADLEW_PATH")
-          echo "Thư mục dự án: $PROJECT_DIR"
           
           chmod +x "$GRADLEW_PATH"
           cd "$PROJECT_DIR"
