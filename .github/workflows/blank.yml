@@ -22,41 +22,42 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK & NDK 23
-        uses: android-actions/setup-android@v3
-        with:
-          ndk-version: 23.2.8568313
-
-      - name: Patch Application.mk for NDK 23
+      - name: Download and Setup Legacy NDK r21e
         run: |
-          # Tìm tất cả file Application.mk để sửa cấu hình tương thích NDK 23
-          find source_code -name "Application.mk" -exec bash -c '
-            for file; do
-              # Bổ sung cờ bỏ qua kiểm tra lỗi ABI cũ
-              echo "APP_ALLOW_MISSING_DEPS := true" >> "$file"
-              sed -i "/APP_PLATFORM/d" "$file"
-              sed -i "s/gnustl_static/c++_static/g" "$file"
-              sed -i "s/stlport_static/c++_static/g" "$file"
-            done
-          ' _ {} +
-          echo "Đã vá xong toàn bộ file Application.mk!"
+          echo "Đang tải NDK r21e..."
+          wget -q https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
+          unzip -q android-ndk-r21e-linux-x86_64.zip
+          echo "ANDROID_NDK_HOME=$PWD/android-ndk-r21e" >> $GITHUB_ENV
 
-      - name: Find and Build with Gradle
+      - name: Force Strip ndkVersion via Python
         run: |
           GRADLEW_PATH=$(find source_code -name "gradlew" -type f)
-          if [ -z "$GRADLEW_PATH" ]; then
-            echo "Không tìm thấy file gradlew trong source code!"
-            exit 1
-          fi
-          
           PROJECT_DIR=$(dirname "$GRADLEW_PATH")
-          echo "Đã tìm thấy dự án tại: $PROJECT_DIR"
+          
+          # Trỏ local.properties về NDK r21e
+          echo "ndk.dir=$PWD/android-ndk-r21e" > "$PROJECT_DIR/local.properties"
+          
+          # Dùng Python quét và xóa sạch mọi dòng chứa ndkVersion trong các file gradle
+          python3 -c '
+          import glob
+          for filepath in glob.glob("source_code/**/build.gradle*", recursive=True):
+              with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                  content = f.read()
+              lines = content.splitlines()
+              new_lines = [l for l in lines if "ndkVersion" not in l]
+              with open(filepath, "w", encoding="utf-8") as f:
+                  f.write("\n".join(new_lines) + "\n")
+          print("Đã xóa sạch ndkVersion cứng trong mã nguồn!")
+          '
+
+      - name: Build APK with Gradle
+        run: |
+          GRADLEW_PATH=$(find source_code -name "gradlew" -type f)
+          PROJECT_DIR=$(dirname "$GRADLEW_PATH")
           
           chmod +x "$GRADLEW_PATH"
           cd "$PROJECT_DIR"
-          
-          # Truyền cờ ép Gradle chấp nhận NDK 23 và tiếp tục build
-          ./gradlew assembleDebug -Pandroid.ndkVersion=23.2.8568313 -Pandroid.options.noStubs=true
+          ./gradlew assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
