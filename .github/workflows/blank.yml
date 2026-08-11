@@ -22,38 +22,21 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Download and Setup Legacy NDK r21e
-        run: |
-          echo "Đang tải NDK r21e..."
-          wget -q https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
-          unzip -q android-ndk-r21e-linux-x86_64.zip
-          echo "ANDROID_NDK_HOME=$PWD/android-ndk-r21e" >> $GITHUB_ENV
-
-      - name: Force Strip ndkVersion via Python
-        run: |
-          GRADLEW_PATH=$(find source_code -name "gradlew" -type f)
-          PROJECT_DIR=$(dirname "$GRADLEW_PATH")
-          
-          # Trỏ local.properties về NDK r21e
-          echo "ndk.dir=$PWD/android-ndk-r21e" > "$PROJECT_DIR/local.properties"
-          
-          # Dùng Python quét và xóa sạch mọi dòng chứa ndkVersion trong các file gradle
-          python3 -c '
-          import glob
-          for filepath in glob.glob("source_code/**/build.gradle*", recursive=True):
-              with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-                  content = f.read()
-              lines = content.splitlines()
-              new_lines = [l for l in lines if "ndkVersion" not in l]
-              with open(filepath, "w", encoding="utf-8") as f:
-                  f.write("\n".join(new_lines) + "\n")
-          print("Đã xóa sạch ndkVersion cứng trong mã nguồn!")
-          '
+      - name: Setup Android SDK and NDK
+        uses: android-actions/setup-android@v3
+        with:
+          ndk-version: 25.1.8937393
 
       - name: Build APK with Gradle
         run: |
           GRADLEW_PATH=$(find source_code -name "gradlew" -type f)
+          if [ -z "$GRADLEW_PATH" ]; then
+            echo "Không tìm thấy file gradlew!"
+            exit 1
+          fi
+          
           PROJECT_DIR=$(dirname "$GRADLEW_PATH")
+          echo "Thư mục dự án: $PROJECT_DIR"
           
           chmod +x "$GRADLEW_PATH"
           cd "$PROJECT_DIR"
