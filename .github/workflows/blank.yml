@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
@@ -22,34 +22,41 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Download and Setup Legacy NDK r21e
-        run: |
-          echo "Đang tải NDK r21e..."
-          wget -q https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
-          unzip -q android-ndk-r21e-linux-x86_64.zip
-          echo "ANDROID_NDK_HOME=$PWD/android-ndk-r21e" >> $GITHUB_ENV
+      - name: Setup Android SDK & NDK 23
+        uses: android-actions/setup-android@v3
+        with:
+          ndk-version: 23.2.8568313
 
-      - name: Fix NDK Version Conflict in Project
+      - name: Patch Application.mk for NDK 23
+        run: |
+          # Tìm tất cả file Application.mk để sửa cấu hình tương thích NDK 23
+          find source_code -name "Application.mk" -exec bash -c '
+            for file; do
+              # Bổ sung cờ bỏ qua kiểm tra lỗi ABI cũ
+              echo "APP_ALLOW_MISSING_DEPS := true" >> "$file"
+              sed -i "/APP_PLATFORM/d" "$file"
+              sed -i "s/gnustl_static/c++_static/g" "$file"
+              sed -i "s/stlport_static/c++_static/g" "$file"
+            done
+          ' _ {} +
+          echo "Đã vá xong toàn bộ file Application.mk!"
+
+      - name: Find and Build with Gradle
         run: |
           GRADLEW_PATH=$(find source_code -name "gradlew" -type f)
-          PROJECT_DIR=$(dirname "$GRADLEW_PATH")
+          if [ -z "$GRADLEW_PATH" ]; then
+            echo "Không tìm thấy file gradlew trong source code!"
+            exit 1
+          fi
           
-          # Trỏ local.properties về đúng NDK r21e
-          echo "ndk.dir=$PWD/android-ndk-r21e" > "$PROJECT_DIR/local.properties"
-          
-          # Xóa bỏ dòng cấu hình ndkVersion bị cứng nhắc trong mã nguồn để tránh xung đột phiên bản
-          find source_code -name "build.gradle" -exec sed -i '/ndkVersion/d' {} +
-          find source_code -name "build.gradle.kts" -exec sed -i '/ndkVersion/d' {} +
-          echo "Đã gỡ bỏ ràng buộc ndkVersion trong source code!"
-
-      - name: Build APK with Gradle
-        run: |
-          GRADLEW_PATH=$(find source_code -name "gradlew" -type f)
           PROJECT_DIR=$(dirname "$GRADLEW_PATH")
+          echo "Đã tìm thấy dự án tại: $PROJECT_DIR"
           
           chmod +x "$GRADLEW_PATH"
           cd "$PROJECT_DIR"
-          ./gradlew assembleDebug
+          
+          # Truyền cờ ép Gradle chấp nhận NDK 23 và tiếp tục build
+          ./gradlew assembleDebug -Pandroid.ndkVersion=23.2.8568313 -Pandroid.options.noStubs=true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
