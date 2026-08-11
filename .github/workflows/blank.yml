@@ -1,4 +1,4 @@
-name: Build Moonlight APK via Docker
+name: Build Custom Moonlight APK
 
 on:
   workflow_dispatch:
@@ -6,8 +6,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    container:
-      image: mingc/android-build-box:latest
 
     steps:
       - name: Checkout repository
@@ -18,24 +16,45 @@ jobs:
           mkdir -p source_code
           unzip -q source.zip -d source_code
 
-      - name: Find and Build with Gradle
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Download and Setup Legacy NDK r21e
+        run: |
+          echo "Đang tải NDK r21e tương thích tuyệt đối với mã nguồn..."
+          wget -q https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
+          unzip -q android-ndk-r21e-linux-x86_64.zip
+          echo "ANDROID_NDK_HOME=$PWD/android-ndk-r21e" >> $GITHUB_ENV
+
+      - name: Configure NDK path for Project
         run: |
           GRADLEW_PATH=$(find source_code -name "gradlew" -type f)
           if [ -z "$GRADLEW_PATH" ]; then
             echo "Không tìm thấy file gradlew!"
             exit 1
           fi
-          
           PROJECT_DIR=$(dirname "$GRADLEW_PATH")
-          echo "Thư mục dự án: $PROJECT_DIR"
+          
+          # Tạo file local.properties để ép Gradle dùng đúng bản NDK r21e cũ
+          echo "ndk.dir=$PWD/android-ndk-r21e" > "$PROJECT_DIR/local.properties"
+          echo "Đã cấu hình xong NDK path tại: $PROJECT_DIR"
+
+      - name: Build APK with Gradle
+        run: |
+          GRADLEW_PATH=$(find source_code -name "gradlew" -type f)
+          PROJECT_DIR=$(dirname "$GRADLEW_PATH")
           
           chmod +x "$GRADLEW_PATH"
           cd "$PROJECT_DIR"
           
-          ./gradlew assembleDebug --stacktrace
+          # Chạy build giải quyết trọn gói cả C++ lẫn Java
+          ./gradlew assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
+          name: custom-moonlight-apk
           path: '**/build/outputs/apk/debug/*.apk'
