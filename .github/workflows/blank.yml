@@ -22,19 +22,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK & NDK
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          ndk-version: 21.4.7075529
 
-      - name: Force NDK Fix & Patch Project
+      - name: Patch Application.mk for NDK Compatibility
         run: |
-          # Xóa bản NDK 23 bị lỗi sẵn trên máy chủ GitHub
-          sudo rm -rf /usr/local/lib/android/sdk/ndk/23.2.8568313
-          
-          # Tự động thay đổi cấu hình ndkVersion trong mã nguồn về bản 21 ổn định
-          find source_code -name "build.gradle" -exec sed -i 's/ndkVersion ".*"/ndkVersion "21.4.7075529"/g' {} +
-          find source_code -name "build.gradle.kts" -exec sed -i 's/ndkVersion = ".*"/ndkVersion = "21.4.7075529"/g' {} +
+          # Xóa bỏ dòng APP_PLATFORM cũ (android-16) gây xung đột với NDK 23
+          find source_code -name "Application.mk" -exec sed -i '/APP_PLATFORM/d' {} +
+          echo "Đã vá xong file Application.mk!"
 
       - name: Find and Build with Gradle
         run: |
