@@ -24,23 +24,23 @@ jobs:
 
       - name: Download and Setup Legacy NDK r21e
         run: |
-          echo "Đang tải NDK r21e tương thích tuyệt đối với mã nguồn..."
+          echo "Đang tải NDK r21e..."
           wget -q https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
           unzip -q android-ndk-r21e-linux-x86_64.zip
           echo "ANDROID_NDK_HOME=$PWD/android-ndk-r21e" >> $GITHUB_ENV
 
-      - name: Configure NDK path for Project
+      - name: Fix NDK Version Conflict in Project
         run: |
           GRADLEW_PATH=$(find source_code -name "gradlew" -type f)
-          if [ -z "$GRADLEW_PATH" ]; then
-            echo "Không tìm thấy file gradlew!"
-            exit 1
-          fi
           PROJECT_DIR=$(dirname "$GRADLEW_PATH")
           
-          # Tạo file local.properties để ép Gradle dùng đúng bản NDK r21e cũ
+          # Trỏ local.properties về đúng NDK r21e
           echo "ndk.dir=$PWD/android-ndk-r21e" > "$PROJECT_DIR/local.properties"
-          echo "Đã cấu hình xong NDK path tại: $PROJECT_DIR"
+          
+          # Xóa bỏ dòng cấu hình ndkVersion bị cứng nhắc trong mã nguồn để tránh xung đột phiên bản
+          find source_code -name "build.gradle" -exec sed -i '/ndkVersion/d' {} +
+          find source_code -name "build.gradle.kts" -exec sed -i '/ndkVersion/d' {} +
+          echo "Đã gỡ bỏ ràng buộc ndkVersion trong source code!"
 
       - name: Build APK with Gradle
         run: |
@@ -49,8 +49,6 @@ jobs:
           
           chmod +x "$GRADLEW_PATH"
           cd "$PROJECT_DIR"
-          
-          # Chạy build giải quyết trọn gói cả C++ lẫn Java
           ./gradlew assembleDebug
 
       - name: Upload APK artifact
