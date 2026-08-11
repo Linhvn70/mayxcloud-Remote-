@@ -32,8 +32,7 @@ jobs:
           chmod +x "$GRADLEW_PATH"
           cd "$PROJECT_DIR"
           
-          # Tiến hành build trực tiếp trong môi trường sạch
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
